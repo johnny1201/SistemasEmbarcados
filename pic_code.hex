@@ -13,77 +13,82 @@ sbit LCD_D6_Direction at TRISD6_bit;
 sbit LCD_D5_Direction at TRISD5_bit;
 sbit LCD_D4_Direction at TRISD4_bit;
 
-#define BOTAO_RESET PORTB.F0  // Botão conectado em RB0
-#define TRIS_BOTAO_RESET TRISB.F0
-
-char recebido;       // caractere recebido via UART
+// Variáveis globais
+char recebido;
 unsigned int tentativas = 0;
 int resetFlag = 0;
 
 void main() {
-     char convert;
-    // Configurações iniciais
-    ADCON1 = 0x0F;      // Configura portas como digitais
-    TRISB.F0 = 1;       // RB0 como entrada para botão reset
-    TRISB.F1 = 0;       // RB1 como saída (se quiser usar para debug)
+    // Configuração inicial
+    ADCON1 = 0x0F;       // Todas as portas como digitais
+    TRISB.F1 = 1;        // RB1 como entrada (botão reset)
+    INTCON2.RBPU = 0;    // Ativa pull-ups internos em PORTB
+
     // Inicializa LCD
     Lcd_Init();
     Lcd_Cmd(_LCD_CURSOR_OFF);
     Lcd_Cmd(_LCD_CLEAR);
-    // Inicializa UART a 9600 baud
+
+    // Inicializa UART
     UART1_Init(9600);
     Delay_ms(100);
+
     // Mensagem inicial
     Lcd_Out(1, 1, "Cofre Inicializado");
     Lcd_Out(2, 1, "Tentativas: 0");
+
     while(1) {
-        // Verifica se recebeu algo do Arduino
+        // Verifica se recebeu algo pela UART
         if (UART1_Data_Ready()) {
             recebido = UART1_Read();
-            switch(recebido) {
-                case 'E': // Tentativa errada chegou
+
+            switch (recebido) {
+                case 'E': // Tentativa errada
                     tentativas++;
-                    
+
                     Lcd_Cmd(_LCD_CLEAR);
                     Lcd_Out(1, 1, "Senha Errada!");
                     Lcd_Out(2, 1, "Tentativas:");
+
                     if (tentativas == 1) {
-                       Lcd_Out(2, 13, "1");  // Mostra número tentativas
-                    }
-                    if (tentativas == 2) {
-                       Lcd_Out(2, 13, "2");  // Mostra número tentativas
-                    }
-                    if (tentativas == 3) {
-                       Lcd_Out(2, 13, "3");  // Mostra número tentativas
-                    }
-                    if (tentativas == 4) {
-                       Lcd_Cmd(_LCD_CLEAR);
-                       Lcd_Out(1, 1, " Cofre ");
-                       Lcd_Out(2, 1, "Bloqueado!");
+                        Lcd_Out(2, 13, "1");
+                    } else if (tentativas == 2) {
+                        Lcd_Out(2, 13, "2");
+                    } else if (tentativas == 3) {
+                        Lcd_Out(2, 13, "3");
+                    } else if (tentativas >= 4) {
+                        Lcd_Cmd(_LCD_CLEAR);
+                        Lcd_Out(1, 1, "  Cofre  ");
+                        Lcd_Out(2, 1, "Bloqueado!");
                     }
                     break;
-                case 'U': // Cofre desbloqueado
+
+                case 'U': // Senha correta
                     Lcd_Cmd(_LCD_CLEAR);
                     Lcd_Out(1, 1, "ACESSO LIBERADO!");
                     Lcd_Out(2, 1, "Cofre aberto");
-                    tentativas = 0;  // reseta tentativas após sucesso
+                    tentativas = 0;
                     break;
+
                 default:
                     break;
             }
         }
-        // Verifica botão reset (pulled-up, ativo baixo)
-        if (BOTAO_RESET == 1 && resetFlag == 1) {
-            resetFlag = 0;
+
+        // Verifica botão reset (ativo baixo: pressionado = 0)
+        if (PORTB.F1 == 0 && resetFlag == 0) {
+            resetFlag = 1;
             tentativas = 0;
             Lcd_Cmd(_LCD_CLEAR);
             Lcd_Out(1, 1, "Tentativas zeradas");
             Lcd_Out(2, 1, "Sistema resetado");
-            UART1_Write('R');  // Envia comando de reset para Arduino
-            Delay_ms(500);
+            UART1_Write('R');  // Envia comando de reset para o Arduino
+            Delay_ms(500);     // Anti-repique simples
         }
-        if (BOTAO_RESET == 1) {
-            resetFlag = 0; // libera flag para próximo reset
+
+        // Libera flag quando botão for solto
+        if (PORTB.F1 == 1) {
+            resetFlag = 0;
         }
     }
 }
